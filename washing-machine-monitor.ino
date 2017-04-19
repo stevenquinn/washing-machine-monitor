@@ -16,11 +16,13 @@ bool washing = false; // Is the washing machine on?
 bool alert = false; // Is alert mode one
 
 // The min / max times for checking for vibration events
-unsigned long vibrateOffMinTime = 1000 * 3;
-unsigned long vibrateOffMaxTime = 1000 * 50;
-unsigned long vibrateOnMinTime = 1000 * 3;
+unsigned long vibrateOffMinTime = 1000 * 60 * 12;
+unsigned long vibrateOffMaxTime = 1000 * 60 * 13;
+unsigned long vibrateOnMinTime = 1000 * 8;
 unsigned long vibrateOnMaxTime = 1000 * 30;
 unsigned long alertInterval = 1000 * 60 * 10; // How long to wait between alerts
+
+int vibrationCountMin = 30;
 
 // Hold whether or not we should start checking for vibrations on start / stop
 bool checkingIfStart = false;
@@ -32,7 +34,6 @@ unsigned long lastAlertTime = 0; // Last time we send an alert
 
 // Count on / off vibrations
 int vibrationOne = 0;
-int vibrationTwo = 0;
 
 
 void setup() {
@@ -48,9 +49,6 @@ void setup() {
 
   displayText("Ready...");
   delay(1000);
-
-  // Init the vibration pin
-  pinMode(VIBRATION_PIN, INPUT); 
 
   // Init the button
   pinMode(BUTTON_PIN, INPUT_PULLUP);
@@ -76,22 +74,11 @@ void loop() {
   int buttonState = digitalRead(BUTTON_PIN);
   if (buttonState) {
     alert = false;
+    vibrationOne = 0;
     display.clearDisplay();
     display.display();
     displayText("Ready...");
   }
-
-  // Debugging lines
-  Serial.print("Washing: ");
-  Serial.println(washing);
-
-  Serial.print("Alert: ");
-  Serial.println(alert);
-
-  Serial.print("VibrationOne: ");
-  Serial.println(vibrationOne);
-  Serial.print("VibrationTwo: ");
-  Serial.println(vibrationTwo);
   
   delay(50);
 
@@ -137,16 +124,12 @@ void checkStartingWashing() {
   if (!checkingIfStart) {
     checkingIfStart = true;
     vibrationOne = 0;
-    vibrationTwo = 0;
     startMillis = millis();
   }
 
   // Check the current state, increment the number of times it's hit it
   if (isVibrating()) {
     vibrationOne++;
-  }
-  else {
-    vibrationTwo++;
   }
 
   if ( hasVibrationStarted() && millis() - startMillis > vibrateOnMinTime) {
@@ -172,16 +155,12 @@ void checkDoneWashing() {
   if (!checkingIfStop) {
     checkingIfStop = true;
     vibrationOne = 0;
-    vibrationTwo = 0;
     startMillis = millis();
   }
 
   // Check the current state, increment the number of times it's hit it
   if (isVibrating()) {
     vibrationOne++;
-  }
-  else {
-    vibrationTwo++;
   }
 
   if ( hasVibrationStopped() && millis() - startMillis > vibrateOffMinTime) {
@@ -190,7 +169,6 @@ void checkDoneWashing() {
     checkingIfStop = false;
     display.clearDisplay();
     display.display();
-    displayText("Sending alert...");
   }
 
   if (millis() - startMillis > vibrateOffMaxTime) {
@@ -204,8 +182,8 @@ void checkDoneWashing() {
 /**
  * Check to see if vibrations have started
  */
-bool hasVibrationStarted() {
-  if (vibrationOne <= vibrationTwo * 1.5 && vibrationOne >= vibrationTwo * 0.7 && vibrationOne > 30 && vibrationTwo > 30) {
+bool hasVibrationStarted() {  
+  if (vibrationOne > vibrationCountMin) {
     return true;
   }
 
@@ -218,7 +196,7 @@ bool hasVibrationStarted() {
  * Check to see if vibrations have stopped
  */
 bool hasVibrationStopped() {
-  if (vibrationOne >= vibrationTwo * 20 || vibrationTwo >= vibrationOne * 20) {
+  if (vibrationOne < vibrationCountMin) {
     return true;
   }
 
@@ -232,6 +210,7 @@ bool hasVibrationStopped() {
 void runAlert() {
   // Make sure we only send alerts periodically
   if (lastAlertTime == 0 || millis() - lastAlertTime > alertInterval) {
+    displayText("Sending alert");
     
     // Connect to twilio and send the alert
     sendSMS(SEND_NUMBER, URLEncode("Washing mashing done!"));
@@ -242,7 +221,7 @@ void runAlert() {
     // Update the display
     display.clearDisplay();
     display.display();
-    displayText("Press button to stop...");
+    displayText("Done");
   }
 }
 
@@ -292,7 +271,9 @@ void sendSMS(String number,String message)
  * Read from the vibration sensor
  */
 bool isVibrating() {
-  return (digitalRead(VIBRATION_PIN)) ? true : false;
+  //return (digitalRead(VIBRATION_PIN)) ? true : false;
+  int soundLevel = analogRead(A0);
+  return (soundLevel > SOUNDLEVEL_THRESHOLD) ? true : false;
 }
 
 
@@ -302,9 +283,9 @@ bool isVibrating() {
 void displayText(String text) {
   display.setTextSize(1);
   display.setTextColor(WHITE);
-  display.setCursor(0,0);
-  display.println(text);
-  display.setCursor(0,0);
+  display.setCursor(10,10);
+  display.println( "      " + text);
+  display.setCursor(10,10);
   display.display();
 }
 
